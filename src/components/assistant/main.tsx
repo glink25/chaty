@@ -403,7 +403,7 @@ function Content() {
     return (
         <div className="w-full h-full flex flex-col overflow-hidden relative">
             <div className="flex justify-center items-center py-2 h-12">
-                <div>{t("appTitle")}</div>
+                <div>{runtime.title ?? t("appTitle")}</div>
                 <div className="absolute right-2">
                     <Actions />
                 </div>

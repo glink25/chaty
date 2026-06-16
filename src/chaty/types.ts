@@ -34,6 +34,8 @@ export type AIChatInitPayload = {
     skills: AIChatSkillDefinition[];
     locale?: "zh" | "en";
     theme?: "light" | "dark" | "system";
+    /** 顶部展示的标题名称。不传时使用 chaty 内置的默认标题。 */
+    title?: string;
     /** 首页空界面时的标语。不传时使用 chaty 内置的默认标语。 */
     emptyStateSlogan?: string;
 };

@@ -26,6 +26,7 @@ export type RuntimeConfig = {
     presetPrompts?: AIChatPresetPrompt[];
     locale?: AIChatInitPayload["locale"];
     theme?: AIChatInitPayload["theme"];
+    title?: string;
     emptyStateSlogan?: string;
 };
 
@@ -211,6 +212,7 @@ export async function loadHostRuntimeConfig(
         presetPrompts: init.presetPrompts,
         locale: init.locale,
         theme: init.theme ?? "system",
+        title: init.title,
         emptyStateSlogan: init.emptyStateSlogan,
     };
 }
