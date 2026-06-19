@@ -7,13 +7,37 @@ settings:
 importers:
 
   .:
-    dependencies:
+    devDependencies:
+      '@biomejs/biome':
+        specifier: latest
+        version: 2.5.0
+      '@iconify-json/mdi':
+        specifier: ^1.2.3
+        version: 1.2.3
+      '@iconify/tailwind4':
+        specifier: ^1.0.6
+        version: 1.2.3(tailwindcss@4.3.1)
       '@radix-ui/react-popover':
         specifier: ^1.1.15
         version: 1.1.17(@types/react-dom@19.2.3(@types/react@19.2.17))(@types/react@19.2.17)(react-dom@19.2.7(react@19.2.7))(react@19.2.7)
       '@radix-ui/react-slot':
         specifier: ^1.2.3
         version: 1.3.0(@types/react@19.2.17)(react@19.2.7)
+      '@tailwindcss/vite':
+        specifier: ^4.1.12
+        version: 4.3.1(vite@8.0.16(@types/node@24.13.2)(jiti@2.7.0)(terser@5.48.0))
+      '@types/node':
+        specifier: ^24.3.1
+        version: 24.13.2
+      '@types/react':
+        specifier: ^19.1.10
+        version: 19.2.17
+      '@types/react-dom':
+        specifier: ^19.1.7
+        version: 19.2.3(@types/react@19.2.17)
+      '@vitejs/plugin-react':
+        specifier: ^6.0.1
+        version: 6.0.2(vite@8.0.16(@types/node@24.13.2)(jiti@2.7.0)(terser@5.48.0))
       class-variance-authority:
         specifier: ^0.7.1
         version: 0.7.1
@@ -47,40 +71,6 @@ importers:
       tailwind-merge:
         specifier: ^3.3.1
         version: 3.6.0
-      zod:
-        specifier: ^4.1.11
-        version: 4.4.3
-      zustand:
-        specifier: ^5.0.8
-        version: 5.0.14(@types/react@19.2.17)(react@19.2.7)
-      zustand-indexeddb:
-        specifier: ^0.1.1
-        version: 0.1.1(zustand@5.0.14(@types/react@19.2.17)(react@19.2.7))
-    devDependencies:
-      '@biomejs/biome':
-        specifier: latest
-        version: 2.5.0
-      '@iconify-json/mdi':
-        specifier: ^1.2.3
-        version: 1.2.3
-      '@iconify/tailwind4':
-        specifier: ^1.0.6
-        version: 1.2.3(tailwindcss@4.3.1)
-      '@tailwindcss/vite':
-        specifier: ^4.1.12
-        version: 4.3.1(vite@8.0.16(@types/node@24.13.2)(jiti@2.7.0)(terser@5.48.0))
-      '@types/node':
-        specifier: ^24.3.1
-        version: 24.13.2
-      '@types/react':
-        specifier: ^19.1.10
-        version: 19.2.17
-      '@types/react-dom':
-        specifier: ^19.1.7
-        version: 19.2.3(@types/react@19.2.17)
-      '@vitejs/plugin-react':
-        specifier: ^6.0.1
-        version: 6.0.2(vite@8.0.16(@types/node@24.13.2)(jiti@2.7.0)(terser@5.48.0))
       tailwindcss:
         specifier: ^4.1.12
         version: 4.3.1
@@ -108,6 +98,15 @@ importers:
       vite-plugin-svgr:
         specifier: ^4.5.0
         version: 4.5.0(rollup@4.62.0)(typescript@5.8.3)(vite@8.0.16(@types/node@24.13.2)(jiti@2.7.0)(terser@5.48.0))
+      zod:
+        specifier: ^4.1.11
+        version: 4.4.3
+      zustand:
+        specifier: ^5.0.8
+        version: 5.0.14(@types/react@19.2.17)(react@19.2.7)
+      zustand-indexeddb:
+        specifier: ^0.1.1
+        version: 0.1.1(zustand@5.0.14(@types/react@19.2.17)(react@19.2.7))
 
 packages:
 
