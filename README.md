@@ -1,11 +1,35 @@
 # chaty
 
 Standalone AI chat frontend. The app owns the chat UI, assistant core,
-conversation persistence, native `listTools` / `listSkills` / `loadSkill`
-tools, and the sandboxed `playground` tool.
+conversation persistence, native `listSkills` / `loadSkill` tools, and the
+sandboxed `playground` tool.
 
 The host owns model credentials, real API requests, injected tools, and injected
 skills.
+
+## Tool calling
+
+Tool calling uses the **native function/tool-calling protocol**, not a custom
+text format. On each turn the app serializes every available tool (app-native +
+host-injected) to JSON Schema and passes them to `requestAI` via `tools`. The
+host forwards these as the underlying model API's native `tools` field, and
+returns the model's tool calls back through `onChunk` as `chunk.toolCalls`
+(with `chunk.finishReason === "tool_calls"`). The app then executes each call —
+app-native tools run locally, injected tools go back to the host via `callTool`
+— and feeds the results into the next turn. `<overview>` titles are still parsed
+from streamed text; only tool calling moved to the native protocol.
+
+```ts
+type ProviderToolCall = { id: string; name: string; params: unknown };
+
+type ProviderRequestChunk = {
+  thought?: string;
+  answer: string;
+  // Populated only once the stream resolves tool calls (typically a final chunk).
+  toolCalls?: ProviderToolCall[];
+  finishReason?: "stop" | "tool_calls" | "length" | string;
+};
+```
 
 ## Run
 
@@ -82,6 +106,16 @@ type HostBridge = {
     requestId: string;
     configId?: string;
     history: History;
+    // Every tool available this turn (app-native + injected), serialized to
+    // JSON Schema. Forward these as the model API's native `tools` field.
+    tools: Array<{
+      name: string;
+      describe: string;
+      argJsonSchema?: Record<string, unknown>;
+      returnJsonSchema: Record<string, unknown>;
+    }>;
+    // Stream text via onChunk({ answer }). To call tools, emit a chunk with
+    // toolCalls: onChunk({ answer: "", toolCalls, finishReason: "tool_calls" }).
     onChunk: (chunk: ProviderRequestChunk) => void;
     onDone: () => void;
     onError: (error: unknown) => void;
@@ -116,7 +150,8 @@ treated as an internal detail only).
 type NativeBridgeMessage =
   | { id: string; type: "getInit" }
   | { id: string; type: "requestAI";
-      payload: { requestId: string; configId?: string; history: History } }
+      payload: { requestId: string; configId?: string; history: History;
+                 tools: AIChatToolDefinition[] } }
   | { id: string; type: "cancelRequest";
       payload: { requestId: string } }
   | { id: string; type: "callTool";
@@ -130,7 +165,8 @@ type NativeBridgeMessage =
 ```js
 window.__AIChatNativeCallbacks[id].resolve(payload)      // getInit / callTool result
 window.__AIChatNativeCallbacks[id].reject({ message })   // getInit / callTool error
-window.__AIChatNativeCallbacks[id].onChunk({ answer })   // requestAI streaming chunk
+window.__AIChatNativeCallbacks[id].onChunk({ answer })   // requestAI streaming text chunk
+window.__AIChatNativeCallbacks[id].onChunk({ answer: "", toolCalls, finishReason: "tool_calls" }) // requestAI tool call
 window.__AIChatNativeCallbacks[id].onDone()              // requestAI finished
 window.__AIChatNativeCallbacks[id].onError({ message })  // requestAI failed
 ```
@@ -138,9 +174,10 @@ window.__AIChatNativeCallbacks[id].onError({ message })  // requestAI failed
 Lifecycle per message type:
 
 - `getInit` → native replies once with `resolve(AIChatInitPayload)`.
-- `requestAI` → native streams `onChunk(...)` zero or more times, then exactly one
-  of `onDone()` / `onError(...)`. A later `cancelRequest` (same `requestId`) means
-  the app stopped listening; native should stop streaming.
+- `requestAI` → native streams `onChunk(...)` zero or more times (text via
+  `{ answer }`, or a tool call via `{ answer, toolCalls, finishReason: "tool_calls" }`),
+  then exactly one of `onDone()` / `onError(...)`. A later `cancelRequest` (same
+  `requestId`) means the app stopped listening; native should stop streaming.
 - `callTool` → native replies once with `resolve(result)` or `reject({ message })`.
 - `cancelRequest` → fire-and-forget; no callback expected.
 
@@ -202,12 +239,11 @@ init, streaming responses, tool calls, and cancellation.
 
 ## Debug Protocol
 
-Without a real model, `test.html` can still exercise the assistant core by
-sending tool protocol text in the iframe:
-
-```xml
-<tool>{"name":"listTools","params":{}}</tool>
-```
+Without a real model, `test.html` / `native-test.html` can still exercise the
+assistant core. The debug host parses `<tool>{...}</tool>` text from the latest
+user message and translates it into a native `toolCalls` chunk — i.e. the mock
+plays the role the model API plays in production. Send any of these in the chat
+input:
 
 ```xml
 <tool>{"name":"sumNumbers","params":{"values":[1,2,3]}}</tool>

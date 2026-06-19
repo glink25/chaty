@@ -127,6 +127,24 @@
       return user?.raw ?? "";
     };
 
+    // 调试辅助：把 `<tool>{"name":...,"params":{}}</tool>` 文本翻译成原生 tool_calls，
+    // 模拟真实模型 API 通过原生协议返回工具调用。
+    const extractToolCalls = (text) => {
+      const calls = [];
+      const regex = /<tool>([\s\S]*?)<\/tool>/g;
+      let index = 0;
+      let match = regex.exec(text);
+      while (match !== null) {
+        try {
+          const parsed = JSON.parse(match[1].trim());
+          calls.push({ id: `call_${index}`, name: parsed.name ?? "unknown_tool", params: parsed.params ?? {} });
+        } catch { }
+        index += 1;
+        match = regex.exec(text);
+      }
+      return calls;
+    };
+
     window.AIChatHost = {
       async getInit() {
         return {
@@ -143,9 +161,9 @@
               prompt: "你好，请简单介绍一下当前测试环境。"
             },
             {
-              id: "list-tools",
-              label: "列出工具",
-              prompt: "<tool>{\"name\":\"listTools\",\"params\":{}}</tool>"
+              id: "sum-numbers",
+              label: "求和工具",
+              prompt: "<tool>{\"name\":\"sumNumbers\",\"params\":{\"values\":[1,2,3]}}</tool>"
             }
           ],
           tools: [
@@ -200,13 +218,23 @@
         };
       },
 
-      requestAI({ configId, history, onChunk, onDone, onError }) {
+      // 注意：`tools` 是 app 传入的全部工具（含 app 内置 + host 注入）的 JSON Schema。
+      // 真实 host 会把它放进底层模型 API 的原生 tools 字段；这里的 mock 仅用它来演示。
+      requestAI({ configId, history, tools, onChunk, onDone, onError }) {
         let cancelled = false;
         const text = getLastUserText(history);
-        const output = `这是测试输出（${configId}）：${text}`;
+        const toolCalls = extractToolCalls(text);
 
         (async () => {
           try {
+            // 模拟模型「决定调用工具」：直接通过原生协议回传 tool_calls。
+            if (toolCalls.length > 0) {
+              if (!cancelled) onChunk({ answer: "", toolCalls, finishReason: "tool_calls" });
+              if (!cancelled) onDone();
+              return;
+            }
+
+            const output = `这是测试输出（${configId}，可用工具 ${tools.length} 个）：${text}`;
             let answer = "";
             for (const char of output) {
               if (cancelled) return;
@@ -281,8 +309,10 @@
     <pre>这是测试输出：{用户输入}</pre>
 
     <h2>Tool Debug</h2>
-    <p>Send protocol text in the iframe to force a tool call:</p>
-    <pre>&lt;tool&gt;{"name":"listTools","params":{}}&lt;/tool&gt;</pre>
+    <p>
+      Send protocol text in the iframe. This host translates it into a native
+      <code>tool_calls</code> chunk (simulating a real model API):
+    </p>
     <pre>&lt;tool&gt;{"name":"sumNumbers","params":{"values":[1,2,3]}}&lt;/tool&gt;</pre>
     <pre>&lt;tool&gt;{"name":"playground","params":{"code":"export default async function () { return await tools.echo({ text: 'from playground' }); }"}}&lt;/tool&gt;</pre>
 

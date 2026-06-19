@@ -18,6 +18,8 @@ export default defineConfig(() => {
     return {
         plugins,
         build: {
+            // HTML/iframe 产物输出到 app-dist，避免与库构建的 dist/ 冲突。
+            outDir: "app-dist",
             rollupOptions: {
                 input: {
                     index: resolve("./index.html"),

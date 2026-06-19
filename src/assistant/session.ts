@@ -2,7 +2,6 @@ import { parseResult } from "./parser";
 import { cloneHistory, createUserMessage } from "./shared";
 import {
     createListSkillsTool,
-    createListToolsTool,
     createLoadSkillTool,
     executeToolCall,
     getInitialSystemPrompt,
@@ -68,15 +67,9 @@ export function createSession({
 
     const listSkillsTool = createListSkillsTool(resolvedSkills);
     const loadSkillTool = createLoadSkillTool(skillMap);
-    const listTool = createListToolsTool([
-        listSkillsTool,
-        loadSkillTool,
-        ...baseTools,
-    ]);
 
     const runtimeTools: Tool<any, any>[] = [
         ...baseTools,
-        listTool,
         listSkillsTool,
         loadSkillTool,
     ];
@@ -101,7 +94,7 @@ export function createSession({
         }),
         {
             role: "system",
-            raw: getInitialSystemPrompt([listTool, listSkillsTool]),
+            raw: getInitialSystemPrompt(),
         },
     );
 
@@ -122,7 +115,11 @@ export function createSession({
             if (round >= maxToolRounds) {
                 return (async function* () {})();
             }
-            currentRequested = provider.request({ history, configId });
+            currentRequested = provider.request({
+                history,
+                tools: runtimeTools,
+                configId,
+            });
 
             async function* createStream(): AsyncGenerator<TurnResult> {
                 yield { history: [...history] };
@@ -141,7 +138,7 @@ export function createSession({
 
                     // 2. 并行执行当前批次的所有工具
                     const toolExecutionPromises = toolIndices.map(
-                        async ({ name, params }) => {
+                        async ({ id, name, params }) => {
                             const startTime = Date.now();
                             try {
                                 const result = await executeToolCall(
@@ -157,6 +154,8 @@ export function createSession({
                                     ...result,
                                     formatted: {
                                         ...result.formatted,
+                                        // 回写原生 tool_call_id，供回传时与 assistant 调用匹配。
+                                        id,
                                         runningTime,
                                     },
                                 } as ToolMessage;
@@ -166,6 +165,7 @@ export function createSession({
                                     role: "tool",
                                     raw: `Error: ${error.message || String(error)}`,
                                     formatted: {
+                                        id,
                                         name: name,
                                         params: params,
                                         runningTime,
@@ -198,8 +198,8 @@ export function createSession({
                     yield* toolStream;
 
                     subAbort = null;
-                    // Provider 返回的是累计文本；一旦出现 tool 标签，后续 chunk 仍会重复包含同一 tool。
-                    // 这里在处理完本批次工具后立即结束当前流，避免重复执行造成循环。
+                    // 原生协议下，工具调用只在流结束（finish_reason==="tool_calls"）的最终 chunk
+                    // 里完整出现。处理完本批次工具后即结束当前流，由上面的递归请求继续下一轮。
                     return;
                 }
             }

@@ -12,9 +12,30 @@ import type {
     AIChatInitPayload,
     AIChatPresetPrompt,
     AIChatSkillDefinition,
+    AIChatToolDefinition,
     HostBridge,
     HostRequestHandle,
 } from "./types";
+
+// host 注入工具的原始 JSON Schema（host 在 getInit 时给出）。序列化工具列表时
+// 优先取这里的原值，避免经 zod 往返丢失 schema。app 内置工具则直接由 zod 推导。
+const hostToolDefinitions = new WeakMap<Tool, AIChatToolDefinition>();
+
+function serializeTool(tool: Tool): AIChatToolDefinition {
+    const hostDef = hostToolDefinitions.get(tool);
+    if (hostDef) return hostDef;
+    return {
+        name: tool.name,
+        describe: tool.describe,
+        argJsonSchema: tool.argSchema
+            ? (z.toJSONSchema(tool.argSchema) as Record<string, unknown>)
+            : undefined,
+        returnJsonSchema: z.toJSONSchema(tool.returnSchema) as Record<
+            string,
+            unknown
+        >,
+    };
+}
 
 export type RuntimeConfig = {
     provider: Provider;
@@ -58,7 +79,7 @@ export function getHostBridge(): HostBridge | undefined {
 
 function createHostProvider(host: HostBridge): Provider {
     return {
-        request: ({ history, configId }) => {
+        request: ({ history, configId, tools }) => {
             let handle: HostRequestHandle | undefined;
             let cancelled = false;
             let done = false;
@@ -78,6 +99,7 @@ function createHostProvider(host: HostBridge): Provider {
                         requestId,
                         configId,
                         history,
+                        tools: tools.map(serializeTool),
                         onChunk: (chunk) => {
                             queue.push(chunk);
                             notify();
@@ -137,7 +159,7 @@ function createHostTool(
     const argDescription = tool.argJsonSchema
         ? JSON.stringify(tool.argJsonSchema)
         : "No parameters";
-    return {
+    const runtimeTool: Tool = {
         name: tool.name,
         describe: tool.describe,
         argSchema: z.unknown().describe(argDescription),
@@ -152,6 +174,9 @@ function createHostTool(
                 history: ctx.history,
             }),
     };
+    // 记住 host 给出的原始 JSON Schema，序列化工具时直接复用，避免经 zod 往返丢失。
+    hostToolDefinitions.set(runtimeTool, tool);
+    return runtimeTool;
 }
 
 function createHostSkill(

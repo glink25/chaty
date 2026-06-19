@@ -20,7 +20,7 @@ export const PlaygroundTool = createTool({
     name: "playground",
     describe:
         "Execute JavaScript module code in a sandboxed worker. Supports getFile(index) for uploaded files in this conversation. " +
-        "Also exposes an async `tools` object: call any other available tool as a function, e.g. `await tools.listTools({})`. " +
+        "Also exposes an async `tools` object: call any other available tool as a function, e.g. `await tools.listSkills({})`. " +
         "Use this to compute data and invoke a tool with it in one snippet, instead of emitting the payload as a separate tool call.",
     argSchema: z.object({
         code: z

@@ -50,6 +50,12 @@ export type HostBridge = {
         requestId: string;
         configId?: string;
         history: History;
+        /**
+         * 本轮可用的全部工具（app 内置 + host 注入），已序列化为 JSON Schema。
+         * host 据此构造底层 API 的原生 `tools` 字段，并在响应里返回原生 tool_calls
+         * （通过 onChunk 的 chunk.toolCalls 回传）。
+         */
+        tools: AIChatToolDefinition[];
         onChunk: (chunk: ProviderRequestChunk) => void;
         onDone: () => void;
         onError: (error: unknown) => void;
@@ -79,6 +85,7 @@ export type NativeBridgeMessage =
               requestId: string;
               configId?: string;
               history: History;
+              tools: AIChatToolDefinition[];
           };
       }
     | {

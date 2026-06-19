@@ -36,6 +36,9 @@ jobs:
         run: |
           asset_name="chat-${GITHUB_REF_NAME}-dist.zip"
           echo "asset_name=${asset_name}" >> "$GITHUB_ENV"
+          # HTML/iframe 产物现在输出到 app-dist（dist 留给库构建）。
+          # 重命名回 dist 以保持发布资产内部目录结构不变。
+          mv app-dist dist
           zip -r "$asset_name" dist
 
       - name: Create or update release

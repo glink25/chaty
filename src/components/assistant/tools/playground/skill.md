@@ -61,19 +61,19 @@ export default function main(input) {
 The runtime also injects a global async `tools` object. Every other tool registered in this
 session is available as `tools.<toolName>(params)` and returns a Promise:
 
-- `params` must match that tool's argument schema (see `listTools`).
+- `params` must match that tool's argument schema (shown in the tool's definition).
 - It resolves with the tool's return value (matching its return schema), or rejects with an error.
 - Calls made through `tools` do **not** appear in the conversation — they are internal to this
   playground run (just like `getFile`), so they do not consume context tokens.
 - `playground` cannot call itself.
 
 This lets you compute a payload and act on it in a single snippet, instead of emitting a large
-payload as a separate tool call. Example — inspect the available tool surface:
+payload as a separate tool call. Example — list the available skills:
 
 ```js
 export default async function () {
-  const toolSummary = await tools.listTools({});
-  return toolSummary.slice(0, 500);
+  const skills = await tools.listSkills({});
+  return skills.slice(0, 10);
 }
 ```
 

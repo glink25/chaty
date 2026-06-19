@@ -33,6 +33,23 @@
         return user?.raw ?? "";
       };
 
+      // 调试辅助：把 `<tool>{...}</tool>` 文本翻译成原生 tool_calls。
+      const extractToolCalls = (text) => {
+        const calls = [];
+        const regex = /<tool>([\s\S]*?)<\/tool>/g;
+        let index = 0;
+        let match = regex.exec(text);
+        while (match !== null) {
+          try {
+            const parsed = JSON.parse(match[1].trim());
+            calls.push({ id: `call_${index}`, name: parsed.name ?? "unknown_tool", params: parsed.params ?? {} });
+          } catch { }
+          index += 1;
+          match = regex.exec(text);
+        }
+        return calls;
+      };
+
       // 每个 requestAI 的取消标记，按 requestId 记录。
       const cancelled = new Set();
 
@@ -86,9 +103,21 @@
         }
 
         if (type === "requestAI") {
-          const { requestId, configId, history } = payload;
+          const { requestId, configId, history, tools } = payload;
           const text = getLastUserText(history);
-          const output = `这是 native 测试输出（${configId}）：${text}`;
+          const toolCalls = extractToolCalls(text);
+
+          // 模拟模型「决定调用工具」：通过原生协议回传 tool_calls。
+          if (toolCalls.length > 0) {
+            if (!cancelled.has(requestId)) {
+              callback(id)?.onChunk({ answer: "", toolCalls, finishReason: "tool_calls" });
+              callback(id)?.onDone();
+            }
+            cancelled.delete(requestId);
+            return;
+          }
+
+          const output = `这是 native 测试输出（${configId}，可用工具 ${tools?.length ?? 0} 个）：${text}`;
           let answer = "";
           for (const char of output) {
             if (cancelled.has(requestId)) {
