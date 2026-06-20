@@ -1,0 +1,111 @@
+/** biome-ignore-all lint/suspicious/noUnknownAtRules: Tailwind CSS directives are handled by the Vite plugin. */
+
+/* 库样式入口：仅输出 theme（设计 token）+ utilities + 组件所需样式，
+   不携带 preflight（全局 reset）与 html/body/#root 布局，避免污染宿主项目的
+   全站 border-color / margin / box-sizing / overflow。standalone 应用的
+   preflight 与全局 reset 仍由 src/index.css 负责。参考 zen 项目的导出范式。
+
+   关键：所有 Tailwind 产物（utilities、theme、动画、prose）统一归入独立的
+   `chaty` cascade layer。这样当宿主自身也是 Tailwind v4（如 cent）时，本库的
+   工具类不会与宿主的 utilities 抢占同一 layer、覆盖宿主的响应式变体（sm:/md:）。
+   宿主只需在其入口 CSS 顶部预声明 `@layer chaty;`（在 @import "tailwindcss" 之前），
+   即可把本库固定为最低优先级；无 Tailwind 的宿主则该 layer 为唯一来源，照常生效。 */
+@import "tailwindcss/theme.css" layer(chaty);
+@import "tailwindcss/utilities.css" layer(chaty);
+/* tw-animate-css 含 @utility（不可被 layer 嵌套），保持顶层导入；其动画工具类
+   不会与宿主的响应式 display 变体冲突。 */
+@import "tw-animate-css";
+/* markdown 渲染样式 */
+@import "../components/assistant/prose.css" layer(chaty);
+@config "../../tailwind.config.mjs";
+
+@custom-variant dark (&:is(.dark *));
+
+@plugin "@iconify/tailwind4";
+@plugin "tailwindcss-animate";
+
+@theme inline {
+    --radius-sm: calc(var(--radius) - 4px);
+    --radius-md: calc(var(--radius) - 2px);
+    --radius-lg: var(--radius);
+    --radius-xl: calc(var(--radius) + 4px);
+    --color-background: var(--background);
+    --color-foreground: var(--foreground);
+    --color-card: var(--card);
+    --color-card-foreground: var(--card-foreground);
+    --color-popover: var(--popover);
+    --color-popover-foreground: var(--popover-foreground);
+    --color-primary: var(--primary);
+    --color-primary-foreground: var(--primary-foreground);
+    --color-secondary: var(--secondary);
+    --color-secondary-foreground: var(--secondary-foreground);
+    --color-muted: var(--muted);
+    --color-muted-foreground: var(--muted-foreground);
+    --color-accent: var(--accent);
+    --color-accent-foreground: var(--accent-foreground);
+    --color-destructive: var(--destructive);
+    --color-destructive-foreground: var(--destructive-foreground);
+    --color-border: var(--border);
+    --color-input: var(--input);
+    --color-ring: var(--ring);
+}
+
+/* 设计 token 与组件工具类统一归入 chaty layer（与上方 utilities 同一最低优先级
+   layer），避免覆盖宿主同名 :root 变量：宿主若已定义 --background 等（如 cent），
+   其 unlayered :root 会优先，于是 chaty 组件自动跟随宿主主题色；无宿主 token 时
+   则用此处默认值。token 放 :root 仍能被 createPortal 到 .chaty-root 之外的内容取到。 */
+@layer chaty {
+    :root {
+        --radius: 0.625rem;
+    --background: oklch(1 0 0);
+    --foreground: oklch(0.129 0.042 264.695);
+    --card: oklch(1 0 0);
+    --card-foreground: oklch(0.129 0.042 264.695);
+    --popover: oklch(1 0 0);
+    --popover-foreground: oklch(0.129 0.042 264.695);
+    --primary: oklch(0.208 0.042 265.755);
+    --primary-foreground: oklch(0.984 0.003 247.858);
+    --secondary: oklch(0.968 0.007 247.896);
+    --secondary-foreground: oklch(0.208 0.042 265.755);
+    --muted: oklch(0.968 0.007 247.896);
+    --muted-foreground: oklch(0.554 0.046 257.417);
+    --accent: oklch(0.968 0.007 247.896);
+    --accent-foreground: oklch(0.208 0.042 265.755);
+    --destructive: oklch(0.577 0.245 27.325);
+    --destructive-foreground: oklch(0.984 0.003 247.858);
+    --border: oklch(0.929 0.013 255.508);
+    --input: oklch(0.929 0.013 255.508);
+    --ring: oklch(0.704 0.04 256.788);
+}
+
+.dark {
+    --background: oklch(30.495% 0.00388 264.575);
+    --foreground: oklch(0.984 0.003 247.858);
+    --card: oklch(0.208 0.042 265.755);
+    --card-foreground: oklch(0.984 0.003 247.858);
+    --popover: oklch(0.208 0.042 265.755);
+    --popover-foreground: oklch(0.984 0.003 247.858);
+    --primary: oklch(0.929 0.013 255.508);
+    --primary-foreground: oklch(0.208 0.042 265.755);
+    --secondary: oklch(0.279 0.041 260.031);
+    --secondary-foreground: oklch(0.984 0.003 247.858);
+    --muted: oklch(0.279 0.041 260.031);
+    --muted-foreground: oklch(0.704 0.04 256.788);
+    --accent: oklch(0.279 0.041 260.031);
+    --accent-foreground: oklch(0.984 0.003 247.858);
+    --destructive: oklch(0.704 0.191 22.216);
+    --border: oklch(1 0 0 / 10%);
+    --input: oklch(1 0 0 / 15%);
+    --ring: oklch(0.551 0.027 264.364);
+}
+
+/* 隐藏滚动条工具类（被消息列表 / preset prompts 使用） */
+.scrollbar-hidden {
+    -ms-overflow-style: none;
+    scrollbar-width: none;
+}
+
+.scrollbar-hidden::-webkit-scrollbar {
+    display: none;
+}
+}

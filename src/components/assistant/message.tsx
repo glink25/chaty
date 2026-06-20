@@ -5,7 +5,13 @@ import "./prose.css";
 import type { Message } from "../../assistant/type";
 import { useI18n } from "./i18n";
 
-export function MessageBubble({ message }: { message: Message }) {
+export function MessageBubble({
+    message,
+    onRerunToolCall,
+}: {
+    message: Message;
+    onRerunToolCall?: () => void;
+}) {
     const { t } = useI18n();
 
     switch (message.role) {
@@ -66,15 +72,31 @@ export function MessageBubble({ message }: { message: Message }) {
             const { name } = message.formatted;
             return (
                 <Collapsible.Root className="bg-muted/50 rounded-md p-2 text-xs select-all">
-                    <Collapsible.Trigger className="flex items-center gap-2 w-full cursor-pointer hover:bg-accent/50 p-1 rounded min-w-0">
-                        <i className="icon-[mdi--tools] size-4"></i>
-                        <span className="font-medium truncate">{name}</span>
-                        {message.formatted.runningTime !== undefined && (
-                            <span className="opacity-60 text-[10px] shrink-0">
-                                {message.formatted.runningTime}ms
-                            </span>
+                    <div className="flex items-center justify-between w-full gap-1">
+                        <Collapsible.Trigger className="flex items-center gap-2 flex-1 cursor-pointer hover:bg-accent/50 p-1 rounded min-w-0">
+                            <i className="icon-[mdi--tools] size-4"></i>
+                            <span className="font-medium truncate">{name}</span>
+                            {message.formatted.runningTime !== undefined && (
+                                <span className="opacity-60 text-[10px] shrink-0">
+                                    {message.formatted.runningTime}ms
+                                </span>
+                            )}
+                        </Collapsible.Trigger>
+                        {name === "playground" && onRerunToolCall && (
+                            <button
+                                type="button"
+                                title={t("rerunToolCall")}
+                                aria-label={t("rerunToolCall")}
+                                onClick={(event) => {
+                                    event.stopPropagation();
+                                    onRerunToolCall();
+                                }}
+                                className="shrink-0 p-1 rounded hover:bg-accent/50 cursor-pointer text-muted-foreground hover:text-foreground"
+                            >
+                                <i className="icon-[mdi--play] size-3.5"></i>
+                            </button>
                         )}
-                    </Collapsible.Trigger>
+                    </div>
                     <Collapsible.Content className="overflow-hidden mt-2 space-y-1 data-[state=open]:animate-collapse-open data-[state=closed]:animate-collapse-close">
                         <div>
                             <strong>{t("params")}:</strong>

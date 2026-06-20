@@ -12,18 +12,16 @@ import {
 } from "react";
 import { Toaster, toast } from "sonner";
 import {
-    type AbortablePromise,
     type AssistantMessage,
     createSession,
     type History,
-    type TurnResult,
 } from "@/assistant";
-import type { RuntimeConfig } from "@/chaty/host";
 import { showFilePicker } from "@/components/file-picker";
 import { Button } from "../ui/button";
 import { Popover, PopoverContent, PopoverTrigger } from "../ui/popover";
 import { I18nProvider, useI18n } from "./i18n";
 import { MessageBubble } from "./message";
+import type { RuntimeConfig } from "./runtime";
 import { type Chat, useAssistantChatStore } from "./state";
 import { applyThemePreference } from "./theme";
 
@@ -37,11 +35,11 @@ type AssistantContext = {
     setCurrentChatId: Dispatch<SetStateAction<Chat["id"] | undefined>>;
     runtime: RuntimeConfig;
     selectedConfigId?: string;
-    setSelectedConfigId: Dispatch<SetStateAction<string | undefined>>;
+    setSelectedConfigId: (configId: string) => void;
     canSend: boolean;
-    isRunning: boolean;
     send: (nextInput?: Input) => void;
-    stop: () => void;
+    abortCurrentChat: () => void;
+    rerunToolCall: (messageIndex: number) => void;
 };
 
 const EMPTY_INPUT: Input = { text: "", assets: [] };
@@ -80,9 +78,14 @@ function isAbortError(error: unknown) {
 function Root({
     children,
     runtime,
+    selectedConfigId: controlledConfigId,
+    onConfigChange,
 }: {
     children?: ReactNode;
     runtime: RuntimeConfig;
+    /** 受控的模型选择。传入时由宿主托管（如 cent 写回 ledger）；不传则内部管理。 */
+    selectedConfigId?: string;
+    onConfigChange?: (configId: string) => void;
 }) {
     const [input, setInput] = useState<Input>(EMPTY_INPUT);
     const [currentChatId, setCurrentChatId] = useState<Chat["id"]>();
@@ -94,12 +97,20 @@ function Root({
             ? runtime.defaultConfigId
             : fallbackConfigId;
     }, [runtime.defaultConfigId, runtime.configs]);
-    const [selectedConfigId, setSelectedConfigId] = useState(initialConfigId);
-    const [isRunning, setIsRunning] = useState(false);
-    const activeRequestRef = useRef<AbortablePromise<
-        AsyncIterable<TurnResult>
-    > | null>(null);
-    const runIdRef = useRef(0);
+    const [internalConfigId, setInternalConfigId] = useState(initialConfigId);
+    const isConfigControlled = controlledConfigId !== undefined;
+    const selectedConfigId = isConfigControlled
+        ? controlledConfigId
+        : internalConfigId;
+    const setSelectedConfigId = useCallback(
+        (configId: string) => {
+            if (!isConfigControlled) {
+                setInternalConfigId(configId);
+            }
+            onConfigChange?.(configId);
+        },
+        [isConfigControlled, onConfigChange],
+    );
     const chats = useAssistantChatStore((s) => s.chats);
     const setChats = useAssistantChatStore((s) => s.setChats);
 
@@ -107,23 +118,22 @@ function Root({
 
     const currentChat = chats.find((chat) => chat.id === currentChatId);
     const canSend =
-        !isRunning && (input.assets.length > 0 || input.text.trim().length > 0);
+        !currentChat?.pending &&
+        (input.assets.length > 0 || input.text.trim().length > 0);
 
+    // updater 形式便于在「新建会话」与「更新流式历史 / pending 状态」间复用。
     const updateChat = useCallback(
-        (chatId: string, history: History) => {
+        (chatId: string, updater: (prev: Chat, exist: boolean) => Chat) => {
             setChats((prev) => {
-                const existingIndex = prev.findIndex(
-                    (chat) => chat.id === chatId,
-                );
-                const nextChat: Chat = {
-                    id: chatId,
-                    history: normalizeHistory(history),
-                };
-                if (existingIndex === -1) {
-                    return [...prev, nextChat];
+                const index = prev.findIndex((chat) => chat.id === chatId);
+                if (index === -1) {
+                    return [
+                        ...prev,
+                        updater({ id: chatId, history: [] }, false),
+                    ];
                 }
                 const nextChats = [...prev];
-                nextChats[existingIndex] = nextChat;
+                nextChats[index] = updater(prev[index], true);
                 return nextChats;
             });
         },
@@ -132,61 +142,99 @@ function Root({
 
     const send = useCallback(
         async (nextInput?: Input) => {
-            if (activeRequestRef.current) {
-                return;
-            }
-
             const payload = nextInput ?? input;
             const text = payload.text.trim();
             if (payload.assets.length === 0 && text.length === 0) {
                 return;
             }
 
-            const runId = runIdRef.current + 1;
-            runIdRef.current = runId;
-            const chatId = currentChat?.id ?? createChatId();
+            const prevChat: Chat = currentChat ?? {
+                id: createChatId(),
+                history: [],
+            };
             const session = createSession({
-                history: currentChat?.history ?? [],
+                history: prevChat.history,
                 ...runtime,
                 configId: selectedConfigId,
             });
-            const request = session({
-                message: text,
-                assets: payload.assets,
-            });
-
-            activeRequestRef.current = request;
-            setIsRunning(true);
             setInput(EMPTY_INPUT);
-            setCurrentChatId(chatId);
+
+            const settle = () =>
+                updateChat(prevChat.id, (prev) => ({
+                    ...prev,
+                    pending: false,
+                    abortController: undefined,
+                }));
 
             try {
+                const request = session({
+                    message: text,
+                    assets: payload.assets,
+                });
+                updateChat(prevChat.id, (prev, exist) => {
+                    if (!exist) {
+                        Promise.resolve().then(() =>
+                            setCurrentChatId(prevChat.id),
+                        );
+                    }
+                    return { ...prev, pending: true, abortController: request };
+                });
+
                 const stream = await request;
                 for await (const chunk of stream) {
-                    updateChat(chatId, chunk.history);
+                    updateChat(prevChat.id, (prev) => ({
+                        ...prev,
+                        history: normalizeHistory(chunk.history),
+                    }));
                 }
+                settle();
             } catch (error) {
+                settle();
                 if (isAbortError(error)) {
                     return;
                 }
                 const message =
                     error instanceof Error ? error.message : String(error);
                 toast.error(message);
-            } finally {
-                if (runIdRef.current === runId) {
-                    activeRequestRef.current = null;
-                    setIsRunning(false);
-                }
             }
         },
         [input, currentChat, runtime, selectedConfigId, updateChat],
     );
 
-    const stop = useCallback(() => {
-        activeRequestRef.current?.abort();
-        activeRequestRef.current = null;
-        setIsRunning(false);
-    }, []);
+    const abortCurrentChat = useCallback(() => {
+        if (!currentChatId) {
+            return;
+        }
+        const chat = chats.find((item) => item.id === currentChatId);
+        chat?.abortController?.abort();
+        updateChat(currentChatId, (prev) => ({
+            ...prev,
+            pending: false,
+            abortController: undefined,
+        }));
+    }, [currentChatId, chats, updateChat]);
+
+    const rerunToolCall = useCallback(
+        async (messageIndex: number) => {
+            const chat = chats.find((item) => item.id === currentChatId);
+            if (!chat) {
+                return;
+            }
+            const session = createSession({
+                history: chat.history,
+                ...runtime,
+                configId: selectedConfigId,
+            });
+            try {
+                await session.rerunToolCall(messageIndex);
+            } catch (error) {
+                toast.error(
+                    error instanceof Error ? error.message : String(error),
+                );
+            }
+        },
+        [chats, currentChatId, runtime, selectedConfigId],
+    );
 
     const ctx = useMemo(
         () => ({
@@ -199,9 +247,9 @@ function Root({
             selectedConfigId,
             setSelectedConfigId,
             canSend,
-            isRunning,
             send,
-            stop,
+            abortCurrentChat,
+            rerunToolCall,
         }),
         [
             input,
@@ -209,19 +257,21 @@ function Root({
             currentChatId,
             runtime,
             selectedConfigId,
+            setSelectedConfigId,
             canSend,
-            isRunning,
             send,
-            stop,
+            abortCurrentChat,
+            rerunToolCall,
         ],
     );
 
+    // Root 只提供 context（不包裹布局 div），以便宿主以 compound 方式把按钮、
+    // 弹层等任意子节点放进 Root 而不被额外的全尺寸容器影响布局。聊天界面的
+    // 背景与尺寸由 Content 自身承载。
     return (
         <I18nProvider locale={runtime.locale}>
             <AssistantContext.Provider value={ctx}>
-                <div className="h-full w-full bg-background text-foreground">
-                    {children}
-                </div>
+                {children}
                 <Toaster richColors position="top-center" />
             </AssistantContext.Provider>
         </I18nProvider>
@@ -373,20 +423,21 @@ function Actions() {
     );
 }
 
-function Content() {
+function Content({ hideHeader }: { hideHeader?: boolean } = {}) {
     const {
         input,
         setInput,
         send,
-        stop,
+        abortCurrentChat,
+        rerunToolCall,
         canSend,
-        isRunning,
         chats,
         currentChatId,
         runtime,
     } = useAssistantContext();
     const { t } = useI18n();
     const currentChat = chats.find((chat) => chat.id === currentChatId);
+    const isPending = Boolean(currentChat?.pending);
     const messagesContainerRef = useRef<HTMLDivElement>(null);
     const sendRef = useRef(send);
     sendRef.current = send;
@@ -401,23 +452,29 @@ function Content() {
     }, [currentChat?.history.length, currentChatId]);
 
     return (
-        <div className="w-full h-full flex flex-col overflow-hidden relative">
-            <div className="flex justify-center items-center py-2 h-12">
-                <div>{runtime.title ?? t("appTitle")}</div>
-                <div className="absolute right-2">
-                    <Actions />
+        <div className="chaty-root w-full h-full flex flex-col overflow-hidden relative bg-background text-foreground">
+            {!hideHeader && (
+                <div className="flex justify-center items-center py-2 h-12">
+                    <div>{runtime.title ?? t("appTitle")}</div>
+                    <div className="absolute right-2">
+                        <Actions />
+                    </div>
                 </div>
-            </div>
+            )}
             <div
                 ref={messagesContainerRef}
-                className="w-full flex-1 flex flex-col gap-4 overflow-y-auto px-2 py-2 pb-[170px] text-sm"
+                className="w-full flex-1 flex flex-col gap-4 overflow-y-auto px-2 pt-2 pb-[170px] text-sm"
             >
                 {currentChat ? (
-                    currentChat.history
-                        .filter((message) => message.role !== "system")
-                        .map((message) => (
-                            <MessageBubble key={message.id} message={message} />
-                        ))
+                    // 不过滤 system 消息：MessageBubble 对 system 渲染为 null，
+                    // 同时保持 index 与会话历史下标一致（rerunToolCall 依赖真实下标）。
+                    currentChat.history.map((message, index) => (
+                        <MessageBubble
+                            key={message.id}
+                            message={message}
+                            onRerunToolCall={() => rerunToolCall(index)}
+                        />
+                    ))
                 ) : (
                     <div className="w-full h-full flex flex-col gap-4 justify-center items-center">
                         <i className="icon-[mdi--shimmer-outline] size-12 text-lg bg-gradient-to-tr from-cyan-400 via-blue-500 to-purple-600"></i>
@@ -437,7 +494,7 @@ function Content() {
                                 key={presetPrompt.id}
                                 type="button"
                                 onClick={async () => {
-                                    if (!isRunning) {
+                                    if (!isPending) {
                                         const nextInput = {
                                             ...input,
                                             text: presetPrompt.prompt,
@@ -540,23 +597,26 @@ function Content() {
                             </Button>
                             <ModelSwitcher />
                         </div>
-                        <Button
-                            variant="ghost"
-                            className="rounded-full p-0 w-8 h-8 bg-foreground/10 hover:bg-foreground/40"
-                            disabled={!isRunning && !canSend}
-                            onClick={isRunning ? stop : () => send()}
-                            aria-label={
-                                isRunning ? t("stopResponse") : t("sendMessage")
-                            }
-                        >
-                            <i
-                                className={`size-4 ${
-                                    isRunning
-                                        ? "icon-[mdi--stop]"
-                                        : "icon-[mdi--send]"
-                                }`}
-                            ></i>
-                        </Button>
+                        {isPending ? (
+                            <Button
+                                variant="ghost"
+                                className="rounded-full p-0 w-8 h-8 bg-destructive hover:bg-destructive/80 text-destructive-foreground"
+                                onClick={abortCurrentChat}
+                                aria-label={t("stopResponse")}
+                            >
+                                <i className="icon-[mdi--stop] size-4"></i>
+                            </Button>
+                        ) : (
+                            <Button
+                                variant="ghost"
+                                className="rounded-full p-0 w-8 h-8 bg-foreground/10 hover:bg-foreground/40"
+                                disabled={!canSend}
+                                onClick={() => send()}
+                                aria-label={t("sendMessage")}
+                            >
+                                <i className="icon-[mdi--send] size-4"></i>
+                            </Button>
+                        )}
                     </div>
                 </div>
             </div>

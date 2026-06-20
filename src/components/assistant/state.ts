@@ -2,11 +2,14 @@ import type { SetStateAction } from "react";
 import { create, type StateCreator } from "zustand";
 import { type PersistOptions, persist } from "zustand/middleware";
 import { createIndexedDBStorage } from "zustand-indexeddb";
-import type { History } from "@/assistant";
+import type { AbortablePromise, History, TurnResult } from "@/assistant";
 
 export type Chat = {
     id: string;
     history: History;
+    // 运行时字段（不持久化，见下方 partialize）：用于支持多会话并发发送与中断。
+    pending?: boolean;
+    abortController?: AbortablePromise<AsyncIterable<TurnResult>>;
 };
 
 export type AssistantChatState = {

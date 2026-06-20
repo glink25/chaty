@@ -1,15 +1,15 @@
 import type { History, ProviderRequestChunk } from "@/assistant";
+import type {
+    AIChatConfig,
+    AIChatLocale,
+    AIChatPresetPrompt,
+    AIChatTheme,
+} from "@/components/assistant/runtime";
 
-export type AIChatConfig = {
-    id: string;
-    name: string;
-};
-
-export type AIChatPresetPrompt = {
-    id: string;
-    label: string;
-    prompt: string;
-};
+export type {
+    AIChatConfig,
+    AIChatPresetPrompt,
+} from "@/components/assistant/runtime";
 
 export type AIChatToolDefinition = {
     name: string;
@@ -32,8 +32,8 @@ export type AIChatInitPayload = {
     presetPrompts: AIChatPresetPrompt[];
     tools: AIChatToolDefinition[];
     skills: AIChatSkillDefinition[];
-    locale?: "zh" | "en";
-    theme?: "light" | "dark" | "system";
+    locale?: AIChatLocale;
+    theme?: AIChatTheme;
     /** 顶部展示的标题名称。不传时使用 chaty 内置的默认标题。 */
     title?: string;
     /** 首页空界面时的标语。不传时使用 chaty 内置的默认标语。 */

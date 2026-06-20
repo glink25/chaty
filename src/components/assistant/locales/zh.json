@@ -11,5 +11,6 @@
 	"thought": "思考",
 	"params": "参数",
 	"returns": "返回值",
-	"error": "错误"
+	"error": "错误",
+	"rerunToolCall": "重新运行工具"
 }

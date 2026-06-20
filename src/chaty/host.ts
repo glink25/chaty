@@ -6,16 +6,17 @@ import type {
     Tool,
 } from "@/assistant";
 import { withAbort } from "@/assistant/shared";
+import type { RuntimeConfig } from "@/components/assistant/runtime";
 import { getAndroidNativeHost, getIosNativeHost } from "./native-host";
 import type {
-    AIChatConfig,
     AIChatInitPayload,
-    AIChatPresetPrompt,
     AIChatSkillDefinition,
     AIChatToolDefinition,
     HostBridge,
     HostRequestHandle,
 } from "./types";
+
+export type { RuntimeConfig };
 
 // host 注入工具的原始 JSON Schema（host 在 getInit 时给出）。序列化工具列表时
 // 优先取这里的原值，避免经 zod 往返丢失 schema。app 内置工具则直接由 zod 推导。
@@ -36,20 +37,6 @@ function serializeTool(tool: Tool): AIChatToolDefinition {
         >,
     };
 }
-
-export type RuntimeConfig = {
-    provider: Provider;
-    tools: Tool[];
-    skills: SkillInput[];
-    systemPrompt?: string;
-    configs: AIChatConfig[];
-    defaultConfigId?: string;
-    presetPrompts?: AIChatPresetPrompt[];
-    locale?: AIChatInitPayload["locale"];
-    theme?: AIChatInitPayload["theme"];
-    title?: string;
-    emptyStateSlogan?: string;
-};
 
 function createRequestId() {
     return (

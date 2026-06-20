@@ -11,5 +11,6 @@
 	"thought": "Thought",
 	"params": "Params",
 	"returns": "Returns",
-	"error": "Error"
+	"error": "Error",
+	"rerunToolCall": "Re-run tool call"
 }
